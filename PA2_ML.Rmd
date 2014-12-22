@@ -1,0 +1,124 @@
+#Practical Machine Learning: Course Project
+By gcallao
+
+##1. Synopsis
+Using the data from a Human Activity Recognition project published in http://groupware.les.inf.puc-rio.br/har we developed a prediction model using Random Forest as learning method for classification and Cross Validation for feature selection. Our final model makes use of 28 features and 500 trees, obtaining 0.38% as out of sample error rate. Finally we predict the class of the 20 observations in the testing data set for submission in the course project webpage achieving a 100% level of accuracy.
+
+##2. Data Processing
+
+We first load the data downloaded using the links provided in the course project webpage.
+```{r}
+training <- read.csv("pml-training.csv")
+testing <- read.csv("pml-testing.csv")
+```
+
+And give a quick look using the first 02 observations of the training data set.
+```{r}
+head(training,2)
+```
+
+We discard the first 05 variables because they are related to the id of the observation, the user name, and time data as saw previously. They have no use for our purposes.
+```{r}
+training <- training[,-c(1:5)]
+```
+
+Also we observed that there are missing values in numerous variables as NAs or empty values, so we proceed with some feature cleaning. In this case we discard the features with a frequency above 95% of being empty values or NAs. We record the indices of those features in delVarIndex and its names in delColNames.
+```{r}
+delColNames <- c()
+delVarIndex <- c()
+tempvalues <- c()
+
+for (i in c(1:dim(training)[2])){
+        tempframe <- data.frame(table(training[,i], useNA = "always")/dim(training)[1])
+        tempframe$Var1 <- as.character(tempframe$Var1)
+        
+        if (tempframe[1,1] == ""){
+            tempframe[1,1] <- "NoValue"
+        }
+        
+        tempframe$Var1[is.na(tempframe$Var1)] <- "NoValue"              
+        tempvalue <- sum(subset(tempframe, Var1 == "NoValue")[,2])
+        
+        if (tempvalue >= 0.95){
+                delColNames <- append(delColNames, colnames(training)[i])
+                delVarIndex <- append(delVarIndex, i)
+                tempvalues <- append(tempvalues, tempvalue)
+        }
+}
+```
+
+And we now apply the Index vector to the training data, keeping only 54 features to train the model in this case (the 55th correspond to the label variable, classe).
+```{r}
+training <- training[, -delVarIndex]
+dim(training)
+```
+
+As final validation, we decide to partition the training data in 02 subsets, training1 and testing1, almost equally sized with p=0.5. In this testing01 data set we are going to estimate the out of sample error rate using the model fit that we are going to develop in the training1 data set.
+```{r}
+library(lattice); library(ggplot2); library(caret); library(randomForest)
+
+set.seed(1)
+InTrain<-createDataPartition(y=training$classe,p=0.5,list=FALSE)
+
+training1 <-training[InTrain,]
+testing1 <- training[-InTrain,]
+```
+
+##3. Prediction Model
+
+We select **Random Forest** as learning method for classification using **10-fold Cross Validation** as training control method, and print the modelFit and the finalModel result.
+```{r, cache=TRUE}
+modelFit <- train(classe ~ ., data = training1, method = "rf", trControl = trainControl(method = "cv"))
+modelFit
+modelFit$finalModel
+```
+
+We see in the modelFit output that because its level of accuracy the optimal model for prediction consist in 28 features selected of the total 54 available initialy for training, and 500 trees with an out of bag error rate of 0.39%.
+
+Now finally we use the testing1 data set (a subset of the training data) to estimate the **out of sample error rate**, obtaining **0.38%**.
+```{r}
+table(testing1$classe, predict(modelFit, testing1[,-55]))
+paste("Out of Sample Error Rate =", as.character(round((1-sum(testing1$classe == predict(modelFit, testing1[,-55]))/length(testing1$classe))*100,2)), "%")
+```
+
+##4. Prediction on the Testing Data
+
+As confident as we are because the low level of out of sample error, we use the final model developed to classify the testing data for submission in the course project webpage.
+
+But first we clean the testing data as it was done in the training data set.
+```{r}
+testing <- testing[,-c(1:5)]
+testing <- testing[,-delVarIndex]
+```
+
+Now we apply the model fit to the testing data.
+```{r}
+Prediction <- predict(modelFit, testing[,-55])
+Prediction
+```
+
+We define the function provided in the course project webpage to generate the text files to submit.
+```{r}
+pml_write_files = function(x){
+        n = length(x)
+        for(i in 1:n){
+                filename = paste0("problem_id_",i,".txt")
+                write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+        }
+}
+```
+
+And generate those files.
+```{r}
+pml_write_files(Prediction)
+```
+
+#5. Conclussion
+We use Random Forest as learning method for classification and 10-fold cross validation as training control method to develop a prediction model using the Human Activity Recognition Data. Our out of sample error was 0.38% and finally we estimate the class of the observations in the testing data achieving an accuracy level of 100%.
+
+
+
+
+
+
+
